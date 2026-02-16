@@ -32,7 +32,7 @@ app.get("/create", async (req, res) => {
     };
 
     // ===== LINK4M API =====
-    const apiToken = "PUT_YOUR_LINK4M_TOKEN_HERE";
+    const apiToken = "687f718ea1faab07844af330";
     const targetUrl = `https://yourdomain.com/getkey?key=${key}`;
 
     const apiUrl = `https://link4m.co/api-shorten/v2?api=${apiToken}&url=${encodeURIComponent(targetUrl)}`;
