@@ -5,11 +5,12 @@ const axios = require("axios");
 
 const app = express();
 app.set("trust proxy", true);
+app.use(express.urlencoded({ extended: true }));
 
 // ===== CONFIG =====
 const PORT = process.env.PORT || 10000;
 const DATA_FILE = "database.json";
-const LINK4M_TOKEN = "687f718ea1faab07844af330"; // HARD CODE
+const LINK4M_TOKEN = "687f718ea1faab07844af330";
 const KEY_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
 // ===================
 
@@ -27,13 +28,11 @@ function saveDB() {
 // ===== AUTO CLEAN =====
 setInterval(() => {
   const now = Date.now();
-
   for (let key in db.keys) {
     if (db.keys[key].expireAt < now) {
       delete db.keys[key];
     }
   }
-
   saveDB();
 }, 60000);
 
@@ -41,8 +40,7 @@ setInterval(() => {
 app.use((req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-XSS-Protection", "1; mode=block");
-  res.setHeader("Content-Security-Policy", "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'");
+  res.setHeader("Referrer-Policy", "no-referrer");
   next();
 });
 
@@ -54,12 +52,9 @@ return `
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${title}</title>
-
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
-
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-
 body{
 height:100vh;
 display:flex;
@@ -68,53 +63,32 @@ align-items:center;
 font-family:'Orbitron',sans-serif;
 background:linear-gradient(-45deg,#0f2027,#203a43,#2c5364,#1c1c1c);
 background-size:400% 400%;
-animation:gradient 15s ease infinite;
-overflow:hidden;
+animation:gradient 12s ease infinite;
 color:#fff;
 }
-
 @keyframes gradient{
 0%{background-position:0% 50%}
 50%{background-position:100% 50%}
 100%{background-position:0% 50%}
 }
-
 .card{
-width:480px;
-padding:40px;
+width:500px;
+padding:45px;
 border-radius:25px;
 background:rgba(0,0,0,0.65);
 backdrop-filter:blur(25px);
 box-shadow:0 0 60px rgba(0,255,255,0.2);
-animation:fade 0.7s ease;
-position:relative;
+animation:fade 0.6s ease;
+text-align:center;
 }
-
 @keyframes fade{
 from{opacity:0;transform:translateY(20px)}
 to{opacity:1;transform:translateY(0)}
 }
-
 h2{
-text-align:center;
 margin-bottom:20px;
-letter-spacing:2px;
 text-shadow:0 0 10px #00ffff;
 }
-
-input{
-width:100%;
-padding:15px;
-border:none;
-border-radius:12px;
-background:#111;
-color:#00ffff;
-text-align:center;
-margin-top:15px;
-font-size:14px;
-box-shadow:0 0 15px rgba(0,255,255,0.2);
-}
-
 button{
 margin-top:20px;
 width:100%;
@@ -125,24 +99,30 @@ background:linear-gradient(45deg,#00ffff,#00ff88);
 font-weight:bold;
 cursor:pointer;
 transition:0.3s;
-font-size:15px;
 }
-
 button:hover{
 transform:scale(1.05);
 box-shadow:0 0 25px #00ffff;
 }
-
+input{
+width:100%;
+padding:15px;
+margin-top:15px;
+border:none;
+border-radius:12px;
+background:#111;
+color:#00ffff;
+text-align:center;
+font-size:14px;
+box-shadow:0 0 15px rgba(0,255,255,0.3);
+}
 .notice{
 margin-top:15px;
-text-align:center;
 font-size:13px;
 opacity:0.8;
 }
-
-.error{color:#ff4d4d;text-align:center}
-.success{color:#00ff88;text-align:center}
-
+.error{color:#ff4d4d}
+.success{color:#00ff88}
 .toast{
 position:fixed;
 bottom:30px;
@@ -155,20 +135,16 @@ box-shadow:0 0 20px #00ff88;
 opacity:0;
 transition:0.4s;
 }
-.toast.show{
-opacity:1;
-}
+.toast.show{opacity:1;}
 </style>
-
 <script>
-function copyText(text){
+function copyKey(text){
 navigator.clipboard.writeText(text);
 const toast=document.getElementById("toast");
 toast.classList.add("show");
 setTimeout(()=>toast.classList.remove("show"),2000);
 }
 </script>
-
 </head>
 <body>
 <div class="card">
@@ -217,26 +193,22 @@ app.post("/create", async (req, res) => {
     res.send(layout("Link Created", `
       <h2 class="success">LINK GENERATED</h2>
       <input value="${shortLink}" readonly>
-      <button onclick="copyText('${shortLink}')">COPY LINK</button>
-      <div class="notice">Key hết hạn sau 2 giờ</div>
+      <button onclick="copyKey('${shortLink}')">COPY LINK</button>
+      <div class="notice">Vượt link để nhận key</div>
     `));
 
   } catch {
-    res.send(layout("Error", `
-      <h2 class="error">LỖI TẠO LINK4M</h2>
-    `));
+    res.send(layout("Error", `<h2 class="error">LỖI TẠO LINK4M</h2>`));
   }
 });
 
-// ===== GET KEY =====
+// ===== SHOW CLAIM PAGE (KHÔNG đánh dấu used) =====
 app.get("/get/:key", (req, res) => {
 
   const key = req.params.key;
 
   if (!db.keys[key]) {
-    return res.send(layout("Error", `
-      <h2 class="error">KEY KHÔNG TỒN TẠI</h2>
-    `));
+    return res.send(layout("Error", `<h2 class="error">KEY KHÔNG TỒN TẠI</h2>`));
   }
 
   const data = db.keys[key];
@@ -244,15 +216,28 @@ app.get("/get/:key", (req, res) => {
   if (Date.now() > data.expireAt) {
     delete db.keys[key];
     saveDB();
-    return res.send(layout("Expired", `
-      <h2 class="error">KEY ĐÃ HẾT HẠN</h2>
-    `));
+    return res.send(layout("Expired", `<h2 class="error">KEY ĐÃ HẾT HẠN</h2>`));
   }
 
   if (data.used) {
-    return res.send(layout("Used", `
-      <h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG</h2>
-    `));
+    return res.send(layout("Used", `<h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG</h2>`));
+  }
+
+  res.send(layout("Claim Key", `
+    <h2>NHẤN ĐỂ NHẬN KEY</h2>
+    <form method="POST" action="/claim/${key}">
+      <button>NHẬN KEY</button>
+    </form>
+  `));
+});
+
+// ===== CLAIM KEY (LÚC NÀY mới đánh dấu used) =====
+app.post("/claim/:key", (req, res) => {
+
+  const key = req.params.key;
+
+  if (!db.keys[key] || db.keys[key].used) {
+    return res.send(layout("Used", `<h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG</h2>`));
   }
 
   db.keys[key].used = true;
@@ -261,8 +246,8 @@ app.get("/get/:key", (req, res) => {
   res.send(layout("Your Key", `
     <h2 class="success">ACCESS GRANTED</h2>
     <input value="${key}" readonly>
-    <button onclick="copyText('${key}')">COPY KEY</button>
-    <div class="notice">Key chỉ dùng 1 lần</div>
+    <button onclick="copyKey('${key}')">COPY KEY</button>
+    <div class="notice">Key chỉ dùng 1 lần • Không refresh</div>
   `));
 });
 
