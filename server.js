@@ -12,7 +12,11 @@ const PORT = process.env.PORT || 10000;
 const DATA_FILE = "database.json";
 const LINK4M_TOKEN = "687f718ea1faab07844af330";
 const KEY_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
+
+// Anti VPN API (FREE)
+const VPN_CHECK_API = "http://ip-api.com/json/"; 
 // ===================
+
 
 // ===== DATABASE =====
 let db = { keys: {} };
@@ -43,7 +47,20 @@ app.use((req, res, next) => {
   next();
 });
 
-// ===== UI =====
+
+// ================= ANTI VPN FUNCTION =================
+async function isVPN(ip) {
+  try {
+    const res = await axios.get(VPN_CHECK_API + ip + "?fields=proxy,hosting");
+    return res.data.proxy === true || res.data.hosting === true;
+  } catch {
+    return false;
+  }
+}
+// =====================================================
+
+
+// ===== UI (GIỮ NGUYÊN) =====
 function layout(title, content) {
 return `
 <!DOCTYPE html>
@@ -165,11 +182,19 @@ app.post("/create", async (req, res) => {
   }
 });
 
-// ===== GET KEY PAGE =====
-app.get("/get/:key", (req, res) => {
+// ===== GET KEY =====
+app.get("/get/:key", async (req, res) => {
 
   const key = req.params.key;
   const ip = req.ip;
+
+  // 🔥 ANTI VPN CHECK
+  if (await isVPN(ip)) {
+    return res.send(layout("Blocked", `
+      <h2 class="error">VPN / PROXY KHÔNG ĐƯỢC PHÉP</h2>
+      <div class="notice">Vui lòng tắt VPN để tiếp tục</div>
+    `));
+  }
 
   if (!db.keys[key]) {
     return res.send(layout("Error", `<h2 class="error">KEY KHÔNG TỒN TẠI</h2>`));
@@ -183,10 +208,8 @@ app.get("/get/:key", (req, res) => {
     return res.send(layout("Expired", `<h2 class="error">KEY HẾT HẠN</h2>`));
   }
 
-  // Nếu key đã claim
   if (data.used) {
 
-    // Nếu cùng thiết bị (IP)
     if (data.device === ip) {
 
       const timeLeft = Math.floor((data.expireAt - Date.now()) / 60000);
@@ -199,13 +222,11 @@ app.get("/get/:key", (req, res) => {
       `));
     }
 
-    // Thiết bị khác
     return res.send(layout("Blocked", `
       <h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG TRÊN THIẾT BỊ KHÁC</h2>
     `));
   }
 
-  // Chưa claim
   res.send(layout("Claim", `
     <h2>NHẬN KEY</h2>
     <form method="POST" action="/claim/${key}">
@@ -215,10 +236,17 @@ app.get("/get/:key", (req, res) => {
 });
 
 // ===== CLAIM =====
-app.post("/claim/:key", (req, res) => {
+app.post("/claim/:key", async (req, res) => {
 
   const key = req.params.key;
   const ip = req.ip;
+
+  // 🔥 ANTI VPN CHECK
+  if (await isVPN(ip)) {
+    return res.send(layout("Blocked", `
+      <h2 class="error">VPN / PROXY KHÔNG ĐƯỢC PHÉP</h2>
+    `));
+  }
 
   if (!db.keys[key] || db.keys[key].used) {
     return res.send(layout("Used", `<h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG</h2>`));
