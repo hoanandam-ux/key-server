@@ -7,12 +7,18 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+/* =====================================================
+   🗂 BỘ NHỚ LƯU KEY & IP (RAM)
+===================================================== */
 let keys = {};
 let ipStore = {};
 
-// ===== AUTO XÓA KEY HẾT HẠN =====
+/* =====================================================
+   ⏳ TỰ ĐỘNG XOÁ KEY & IP HẾT HẠN (MỖI 60 GIÂY)
+===================================================== */
 setInterval(() => {
   const now = Date.now();
+
   for (let key in keys) {
     if (keys[key].expire < now) {
       delete keys[key];
@@ -27,7 +33,9 @@ setInterval(() => {
 
 }, 60000);
 
-// ===== MÃ HÓA KEY =====
+/* =====================================================
+   🔐 MÃ HOÁ & GIẢI MÃ KEY
+===================================================== */
 function encodeKey(key) {
   return Buffer.from(key).toString("base64");
 }
@@ -36,9 +44,73 @@ function decodeKey(encoded) {
   return Buffer.from(encoded, "base64").toString("utf8");
 }
 
-// =================================
-// 🔥 TRANG CHỦ – 1 IP = 1 KEY
-// =================================
+/* =====================================================
+   🚀 TRANG CHỦ – TẠO KEY (1 IP = 1 KEY)
+===================================================== */
+app.get("/", async (req, res) => {
+
+  try {
+
+    const userIP =
+      req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+
+    const now = Date.now();
+
+    // Nếu IP đã có key chưa hết hạn
+    if (ipStore[userIP] && ipStore[userIP] > now) {
+      return res.send("⚠ IP này đã tạo key. Vui lòng đợi hết hạn.");
+    }
+
+    // Tạo key mới
+    const key = "AXL-" + uuidv4().slice(0, 8).toUpperCase();
+    const expire = now + (2 * 60 * 60 * 1000); // 2 giờ
+
+    keys[key] = {
+      expire,
+      used: false
+    };
+
+    ipStore[userIP] = expire;
+
+    const encoded = encodeKey(key);
+
+    // ===== LINK4M API =====
+    const apiToken = process.env.LINK4M_TOKEN;
+    const targetUrl =
+      `https://key-server-rg35.onrender.com/get/${encoded}`;
+
+    const apiUrl =
+      `https://link4m.co/api-shorten/v2?api=${apiToken}&url=${encodeURIComponent(targetUrl)}`;
+
+    const response = await axios.get(apiUrl);
+
+    if (response.data.status !== "success") {
+      return res.send("Lỗi tạo link4m");
+    }
+
+    const shortLink = response.data.shortenedUrl;
+
+    res.send(`
+      <html>
+      <body style="background:#0f172a;color:white;text-align:center;padding-top:100px;font-family:Arial">
+      <h2>🚀 AXL DEV KEY SYSTEM</h2>
+      <p>Key hợp lệ trong 2 giờ</p>
+      <a href="${shortLink}" target="_blank"
+         style="padding:12px 25px;background:#00f2ff;color:black;text-decoration:none;border-radius:10px;font-weight:bold">
+         VƯỢT LINK ĐỂ LẤY KEY
+      </a>
+      </body>
+      </html>
+    `);
+
+  } catch (e) {
+    res.send("Server error");
+  }
+});
+
+/* =====================================================
+   🔥 GET KEY – KEY CHỈ DÙNG 1 LẦN
+===================================================== */
 app.get("/get/:encoded", (req, res) => {
 
   const encoded = req.params.encoded;
@@ -57,6 +129,7 @@ app.get("/get/:encoded", (req, res) => {
     return res.send("⚠ Key đã được sử dụng");
   }
 
+  // Đánh dấu đã dùng
   keys[key].used = true;
 
   const expireTime = keys[key].expire;
@@ -95,17 +168,6 @@ app.get("/get/:encoded", (req, res) => {
     to{opacity:1; transform:translateY(0);}
   }
 
-  h2{
-    margin:0;
-    font-weight:600;
-  }
-
-  .success{
-    font-size:14px;
-    color:#22c55e;
-    margin-top:8px;
-  }
-
   .key-box{
     margin-top:25px;
     background:#0f172a;
@@ -128,11 +190,6 @@ app.get("/get/:encoded", (req, res) => {
     font-weight:bold;
     font-size:15px;
     cursor:pointer;
-    transition:0.3s;
-  }
-
-  .btn:hover{
-    background:#00d4e0;
   }
 
   .copied{
@@ -147,12 +204,6 @@ app.get("/get/:encoded", (req, res) => {
     font-size:13px;
     color:#94a3b8;
   }
-
-  .footer{
-    margin-top:25px;
-    font-size:12px;
-    color:#64748b;
-  }
   </style>
   </head>
 
@@ -160,20 +211,15 @@ app.get("/get/:encoded", (req, res) => {
 
   <div class="card">
     <h2>🔐 KEY ĐÃ SẴN SÀNG</h2>
-    <div class="success">Vượt link thành công</div>
 
     <div class="key-box" id="keyText">${key}</div>
 
     <button class="btn" onclick="copyKey()">SAO CHÉP KEY</button>
 
-    <div class="copied" id="copiedMsg">✓ Đã sao chép vào clipboard</div>
+    <div class="copied" id="copiedMsg">✓ Đã sao chép</div>
 
     <div class="expire">
       Hết hạn sau: <span id="countdown"></span>
-    </div>
-
-    <div class="footer">
-      © 2026 AXL DEV
     </div>
   </div>
 
@@ -181,13 +227,9 @@ app.get("/get/:encoded", (req, res) => {
   function copyKey(){
     const text = document.getElementById("keyText").innerText;
     navigator.clipboard.writeText(text);
-
     const msg = document.getElementById("copiedMsg");
     msg.style.display = "block";
-
-    setTimeout(()=>{
-      msg.style.display = "none";
-    },2000);
+    setTimeout(()=>{ msg.style.display = "none"; },2000);
   }
 
   const expireTime = ${expireTime};
@@ -201,12 +243,12 @@ app.get("/get/:encoded", (req, res) => {
       return;
     }
 
-    const hours = Math.floor(diff / (1000*60*60));
-    const minutes = Math.floor((diff % (1000*60*60)) / (1000*60));
-    const seconds = Math.floor((diff % (1000*60)) / 1000);
+    const h = Math.floor(diff/(1000*60*60));
+    const m = Math.floor((diff%(1000*60*60))/(1000*60));
+    const s = Math.floor((diff%(1000*60))/1000);
 
     document.getElementById("countdown").innerText =
-      hours + "h " + minutes + "m " + seconds + "s";
+      h+"h "+m+"m "+s+"s";
   }
 
   setInterval(updateCountdown,1000);
@@ -218,3 +260,34 @@ app.get("/get/:encoded", (req, res) => {
   `);
 });
 
+/* =====================================================
+   🔎 VERIFY API
+===================================================== */
+app.get("/verify", (req, res) => {
+
+  const { key } = req.query;
+
+  if (!keys[key]) {
+    return res.json({ status: "invalid" });
+  }
+
+  if (Date.now() > keys[key].expire) {
+    delete keys[key];
+    return res.json({ status: "expired" });
+  }
+
+  if (keys[key].used === false) {
+    return res.json({ status: "not_used_yet" });
+  }
+
+  res.json({
+    status: "valid",
+    expire: keys[key].expire
+  });
+});
+
+/* ===================================================== */
+
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
+});
