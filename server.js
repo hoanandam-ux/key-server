@@ -6,6 +6,7 @@ const axios = require("axios");
 const app = express();
 app.set("trust proxy", true);
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json()); // <-- thêm để nhận JSON nếu cần
 
 // ===== CONFIG =====
 const PORT = process.env.PORT || 10000;
@@ -182,13 +183,48 @@ app.post("/create", async (req, res) => {
   }
 });
 
+
+// =====================
+// ===== VERIFY API =====  <-- CHỈ THÊM ĐOẠN NÀY
+// =====================
+app.post("/verify", async (req, res) => {
+  const key = req.body.key;
+  const ip = req.ip;
+
+  if (!db.keys[key]) {
+    return res.json({ status: "invalid" });
+  }
+
+  const data = db.keys[key];
+
+  if (Date.now() > data.expireAt) {
+    delete db.keys[key];
+    saveDB();
+    return res.json({ status: "expired" });
+  }
+
+  if (!data.used) {
+    return res.json({ status: "not_claimed" });
+  }
+
+  if (data.device !== ip) {
+    return res.json({ status: "device_mismatch" });
+  }
+
+  return res.json({
+    status: "valid",
+    expireAt: data.expireAt
+  });
+});
+// =====================
+
+
 // ===== GET KEY =====
 app.get("/get/:key", async (req, res) => {
 
   const key = req.params.key;
   const ip = req.ip;
 
-  // 🔥 ANTI VPN CHECK
   if (await isVPN(ip)) {
     return res.send(layout("Blocked", `
       <h2 class="error">VPN / PROXY KHÔNG ĐƯỢC PHÉP</h2>
@@ -241,7 +277,6 @@ app.post("/claim/:key", async (req, res) => {
   const key = req.params.key;
   const ip = req.ip;
 
-  // 🔥 ANTI VPN CHECK
   if (await isVPN(ip)) {
     return res.send(layout("Blocked", `
       <h2 class="error">VPN / PROXY KHÔNG ĐƯỢC PHÉP</h2>
