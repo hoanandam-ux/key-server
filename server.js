@@ -140,7 +140,7 @@ ${content}
 // ===== HOME =====
 app.get("/", (req, res) => {
   res.send(layout("Secure Server", `
-    <h2>SECURE KEY GENERATOR</h2>
+    <h2>TOOL MD5 PRO</h2>
     <form method="POST" action="/create">
       <button>TẠO KEY</button>
     </form>
@@ -172,7 +172,7 @@ app.post("/create", async (req, res) => {
     const shortLink = response.data.shortenedUrl;
 
     res.send(layout("Link Created", `
-      <h2 class="success">LINK GENERATED</h2>
+      <h2 class="success">VƯỢT LINK ĐỂ LẤY KEY</h2>
       <input value="${shortLink}" readonly>
       <button onclick="copyKey('${shortLink}')">COPY LINK</button>
     `));
