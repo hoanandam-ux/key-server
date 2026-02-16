@@ -7,15 +7,24 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-/* =====================================================
-   🗂 BỘ NHỚ LƯU KEY & IP (RAM)
-===================================================== */
+/* =========================================
+   ⚙ CẤU HÌNH
+========================================= */
+
+const BASE_URL = "https://key-server-rg35.onrender.com";
+const LINK4M_TOKEN = "687f718ea1faab07844af330"; // 🔥 TOKEN CỦA BẠN
+
+/* =========================================
+   🗂 RAM STORE
+========================================= */
+
 let keys = {};
 let ipStore = {};
 
-/* =====================================================
-   ⏳ TỰ ĐỘNG XOÁ KEY & IP HẾT HẠN (MỖI 60 GIÂY)
-===================================================== */
+/* =========================================
+   ⏳ AUTO CLEAN 60s
+========================================= */
+
 setInterval(() => {
   const now = Date.now();
 
@@ -33,9 +42,10 @@ setInterval(() => {
 
 }, 60000);
 
-/* =====================================================
-   🔐 MÃ HOÁ & GIẢI MÃ KEY
-===================================================== */
+/* =========================================
+   🔐 ENCODE
+========================================= */
+
 function encodeKey(key) {
   return Buffer.from(key).toString("base64");
 }
@@ -44,9 +54,10 @@ function decodeKey(encoded) {
   return Buffer.from(encoded, "base64").toString("utf8");
 }
 
-/* =====================================================
-   🚀 TRANG CHỦ – TẠO KEY (1 IP = 1 KEY)
-===================================================== */
+/* =========================================
+   🏠 TRANG TẠO LINK
+========================================= */
+
 app.get("/", async (req, res) => {
 
   try {
@@ -56,213 +67,212 @@ app.get("/", async (req, res) => {
 
     const now = Date.now();
 
-    // Nếu IP đã có key chưa hết hạn
     if (ipStore[userIP] && ipStore[userIP] > now) {
-      return res.send("⚠ IP này đã tạo key. Vui lòng đợi hết hạn.");
+      return res.send(`
+        <h2 style="text-align:center;margin-top:100px;font-family:Segoe UI">
+        ⚠ IP này đã tạo key. Vui lòng đợi 2 giờ.
+        </h2>
+      `);
     }
 
-    // Tạo key mới
     const key = "AXL-" + uuidv4().slice(0, 8).toUpperCase();
-    const expire = now + (2 * 60 * 60 * 1000); // 2 giờ
+    const expire = now + (2 * 60 * 60 * 1000);
 
-    keys[key] = {
-      expire,
-      used: false
-    };
-
+    keys[key] = { expire, used: false };
     ipStore[userIP] = expire;
 
     const encoded = encodeKey(key);
 
-    // ===== LINK4M API =====
-    const apiToken = process.env.LINK4M_TOKEN;
-    const targetUrl =
-      `https://key-server-rg35.onrender.com/get/${encoded}`;
+    const targetUrl = `${BASE_URL}/get/${encoded}`;
 
     const apiUrl =
-      `https://link4m.co/api-shorten/v2?api=${apiToken}&url=${encodeURIComponent(targetUrl)}`;
+      `https://link4m.co/api-shorten/v2?api=${LINK4M_TOKEN}&url=${encodeURIComponent(targetUrl)}`;
 
     const response = await axios.get(apiUrl);
 
-    if (response.data.status !== "success") {
-      return res.send("Lỗi tạo link4m");
+    if (!response.data || response.data.status !== "success") {
+      return res.send("❌ Lỗi tạo link4m");
     }
 
     const shortLink = response.data.shortenedUrl;
 
     res.send(`
-      <html>
-      <body style="background:#0f172a;color:white;text-align:center;padding-top:100px;font-family:Arial">
-      <h2>🚀 AXL DEV KEY SYSTEM</h2>
-      <p>Key hợp lệ trong 2 giờ</p>
-      <a href="${shortLink}" target="_blank"
-         style="padding:12px 25px;background:#00f2ff;color:black;text-decoration:none;border-radius:10px;font-weight:bold">
-         VƯỢT LINK ĐỂ LẤY KEY
-      </a>
-      </body>
-      </html>
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AXL DEV KEY SYSTEM</title>
+<style>
+body{
+margin:0;
+background:linear-gradient(135deg,#0f172a,#020617);
+font-family:Segoe UI;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+color:white;
+}
+.card{
+background:#1e293b;
+padding:45px;
+border-radius:25px;
+width:420px;
+text-align:center;
+box-shadow:0 0 60px #00f2ff30;
+}
+.btn{
+margin-top:30px;
+padding:14px;
+width:100%;
+border:none;
+border-radius:14px;
+background:#00f2ff;
+font-weight:bold;
+text-decoration:none;
+display:inline-block;
+color:black;
+transition:0.3s;
+font-size:16px;
+}
+.btn:hover{
+background:#00d4e0;
+}
+.small{
+opacity:0.7;
+margin-top:15px;
+font-size:13px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>🚀 AXL PREMIUM KEY SYSTEM</h2>
+<p>Key có hiệu lực trong 2 giờ</p>
+
+<a class="btn" href="${shortLink}" target="_blank">
+VƯỢT LINK ĐỂ NHẬN KEY
+</a>
+
+<p class="small">Hệ thống bảo mật 1 IP = 1 Key</p>
+</div>
+</body>
+</html>
     `);
 
-  } catch (e) {
+  } catch (err) {
+    console.log(err);
     res.send("Server error");
   }
+
 });
 
-/* =====================================================
-   🔥 GET KEY – KEY CHỈ DÙNG 1 LẦN
-===================================================== */
+/* =========================================
+   🔑 NHẬN KEY (SAU KHI VƯỢT LINK)
+========================================= */
+
 app.get("/get/:encoded", (req, res) => {
 
-  const encoded = req.params.encoded;
-  const key = decodeKey(encoded);
+  const key = decodeKey(req.params.encoded);
 
   if (!keys[key]) {
-    return res.send("Key không tồn tại");
+    return res.send("Key không tồn tại hoặc đã hết hạn.");
   }
 
   if (Date.now() > keys[key].expire) {
     delete keys[key];
-    return res.send("Key đã hết hạn");
+    return res.send("Key đã hết hạn.");
   }
 
   if (keys[key].used) {
-    return res.send("⚠ Key đã được sử dụng");
+    return res.send("⚠ Key đã được sử dụng.");
   }
 
-  // Đánh dấu đã dùng
   keys[key].used = true;
 
-  const expireTime = keys[key].expire;
-
   res.send(`
-  <!DOCTYPE html>
-  <html>
-  <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AXL DEV - KEY SUCCESS</title>
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>YOUR KEY</title>
+<style>
+body{
+margin:0;
+background:linear-gradient(135deg,#0f172a,#020617);
+font-family:Segoe UI;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+color:white;
+}
+.card{
+background:#1e293b;
+padding:50px;
+border-radius:25px;
+width:450px;
+text-align:center;
+box-shadow:0 0 80px #00f2ff40;
+}
+.keybox{
+background:#0f172a;
+padding:18px;
+border-radius:12px;
+font-size:22px;
+margin-top:20px;
+letter-spacing:2px;
+}
+.btn{
+margin-top:25px;
+padding:14px;
+width:100%;
+border:none;
+border-radius:14px;
+background:#00f2ff;
+font-weight:bold;
+cursor:pointer;
+font-size:16px;
+}
+.btn:hover{
+background:#00d4e0;
+}
+.success{
+margin-top:15px;
+color:#22c55e;
+display:none;
+}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>🔐 KEY CỦA BẠN</h2>
 
-  <style>
-  body{
-    margin:0;
-    height:100vh;
-    background:linear-gradient(135deg,#0f172a,#020617);
-    font-family: 'Segoe UI', sans-serif;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    color:white;
-  }
+<div class="keybox" id="key">${key}</div>
 
-  .card{
-    background:#1e293b;
-    padding:45px;
-    width:420px;
-    border-radius:25px;
-    text-align:center;
-    box-shadow:0 0 60px #00f2ff20;
-    animation:fadeIn 0.6s ease;
-  }
+<button class="btn" onclick="copyKey()">SAO CHÉP KEY</button>
 
-  @keyframes fadeIn{
-    from{opacity:0; transform:translateY(20px);}
-    to{opacity:1; transform:translateY(0);}
-  }
+<div class="success" id="success">✔ Đã sao chép thành công</div>
+</div>
 
-  .key-box{
-    margin-top:25px;
-    background:#0f172a;
-    padding:18px;
-    border-radius:15px;
-    font-size:22px;
-    font-weight:bold;
-    letter-spacing:3px;
-    border:1px solid #334155;
-    user-select:all;
-  }
+<script>
+function copyKey(){
+const text=document.getElementById("key").innerText;
+navigator.clipboard.writeText(text);
+document.getElementById("success").style.display="block";
+}
+</script>
 
-  .btn{
-    margin-top:20px;
-    padding:14px;
-    width:100%;
-    border:none;
-    border-radius:12px;
-    background:#00f2ff;
-    font-weight:bold;
-    font-size:15px;
-    cursor:pointer;
-  }
-
-  .copied{
-    margin-top:12px;
-    font-size:13px;
-    color:#22c55e;
-    display:none;
-  }
-
-  .expire{
-    margin-top:18px;
-    font-size:13px;
-    color:#94a3b8;
-  }
-  </style>
-  </head>
-
-  <body>
-
-  <div class="card">
-    <h2>🔐 KEY ĐÃ SẴN SÀNG</h2>
-
-    <div class="key-box" id="keyText">${key}</div>
-
-    <button class="btn" onclick="copyKey()">SAO CHÉP KEY</button>
-
-    <div class="copied" id="copiedMsg">✓ Đã sao chép</div>
-
-    <div class="expire">
-      Hết hạn sau: <span id="countdown"></span>
-    </div>
-  </div>
-
-  <script>
-  function copyKey(){
-    const text = document.getElementById("keyText").innerText;
-    navigator.clipboard.writeText(text);
-    const msg = document.getElementById("copiedMsg");
-    msg.style.display = "block";
-    setTimeout(()=>{ msg.style.display = "none"; },2000);
-  }
-
-  const expireTime = ${expireTime};
-
-  function updateCountdown(){
-    const now = Date.now();
-    const diff = expireTime - now;
-
-    if(diff <= 0){
-      document.getElementById("countdown").innerText = "ĐÃ HẾT HẠN";
-      return;
-    }
-
-    const h = Math.floor(diff/(1000*60*60));
-    const m = Math.floor((diff%(1000*60*60))/(1000*60));
-    const s = Math.floor((diff%(1000*60))/1000);
-
-    document.getElementById("countdown").innerText =
-      h+"h "+m+"m "+s+"s";
-  }
-
-  setInterval(updateCountdown,1000);
-  updateCountdown();
-  </script>
-
-  </body>
-  </html>
+</body>
+</html>
   `);
+
 });
 
-/* =====================================================
-   🔎 VERIFY API
-===================================================== */
+/* =========================================
+   🔎 VERIFY
+========================================= */
+
 app.get("/verify", (req, res) => {
 
   const { key } = req.query;
@@ -276,7 +286,7 @@ app.get("/verify", (req, res) => {
     return res.json({ status: "expired" });
   }
 
-  if (keys[key].used === false) {
+  if (!keys[key].used) {
     return res.json({ status: "not_used_yet" });
   }
 
@@ -284,9 +294,10 @@ app.get("/verify", (req, res) => {
     status: "valid",
     expire: keys[key].expire
   });
+
 });
 
-/* ===================================================== */
+/* ========================================= */
 
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
