@@ -39,115 +39,6 @@ function decodeKey(encoded) {
 // =================================
 // 🔥 TRANG CHỦ – 1 IP = 1 KEY
 // =================================
-app.get("/", async (req, res) => {
-  try {
-
-    const userIP =
-      req.headers["x-forwarded-for"] || req.socket.remoteAddress;
-
-    const now = Date.now();
-
-    if (ipStore[userIP] && ipStore[userIP] > now) {
-      return res.send("⚠ IP này đã tạo key. Vui lòng đợi hết hạn.");
-    }
-
-    const key = "AXL-" + uuidv4().slice(0, 8).toUpperCase();
-    const expire = now + (2 * 60 * 60 * 1000);
-
-    keys[key] = {
-      expire,
-      used: false
-    };
-
-    ipStore[userIP] = expire;
-
-    const encoded = encodeKey(key);
-
-    const apiToken = "687f718ea1faab07844af330"; // TOKEN LINK4M
-
-    const targetUrl =
-      `https://key-server-rg35.onrender.com/get/${encoded}`;
-
-    const apiUrl =
-      `https://link4m.co/api-shorten/v2?api=${apiToken}&url=${encodeURIComponent(targetUrl)}`;
-
-    const response = await axios.get(apiUrl);
-
-    if (response.data.status !== "success") {
-      return res.send("Lỗi tạo link4m");
-    }
-
-    const shortLink = response.data.shortenedUrl;
-
-    res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>AXL DEV KEY SYSTEM</title>
-    <style>
-    body{
-      margin:0;
-      background:linear-gradient(135deg,#0f172a,#020617);
-      font-family:Arial;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      height:100vh;
-      color:white;
-    }
-    .card{
-      background:#1e293b;
-      padding:40px;
-      border-radius:20px;
-      width:420px;
-      text-align:center;
-      box-shadow:0 0 40px #00f2ff30;
-    }
-    .btn{
-      display:inline-block;
-      margin-top:20px;
-      padding:12px 25px;
-      background:#00f2ff;
-      color:black;
-      font-weight:bold;
-      text-decoration:none;
-      border-radius:10px;
-    }
-    .tag{
-      margin-top:15px;
-      font-size:13px;
-      color:#94a3b8;
-    }
-    </style>
-    </head>
-    <body>
-
-    <div class="card">
-      <h2>🚀 AXL DEV KEY SYSTEM</h2>
-      <p>Key hợp lệ trong 2 giờ</p>
-
-      <a class="btn" href="${shortLink}" target="_blank">
-        VƯỢT LINK ĐỂ LẤY KEY
-      </a>
-
-      <div class="tag">
-        © 2026 AXL DEV
-      </div>
-    </div>
-
-    </body>
-    </html>
-    `);
-
-  } catch (e) {
-    res.send("Server error");
-  }
-});
-
-// =================================
-// 🔥 GET KEY (CHỐNG SHARE)
-// =================================
 app.get("/get/:encoded", (req, res) => {
 
   const encoded = req.params.encoded;
@@ -168,80 +59,158 @@ app.get("/get/:encoded", (req, res) => {
 
   keys[key].used = true;
 
+  const expireTime = keys[key].expire;
+
   res.send(`
   <!DOCTYPE html>
   <html>
   <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AXL DEV KEY</title>
+  <title>AXL DEV - KEY SUCCESS</title>
+
   <style>
   body{
     margin:0;
-    background:#0f172a;
-    font-family:Arial;
+    height:100vh;
+    background:linear-gradient(135deg,#0f172a,#020617);
+    font-family: 'Segoe UI', sans-serif;
     display:flex;
     justify-content:center;
     align-items:center;
-    height:100vh;
     color:white;
   }
+
   .card{
     background:#1e293b;
-    padding:40px;
-    border-radius:20px;
-    width:400px;
+    padding:45px;
+    width:420px;
+    border-radius:25px;
     text-align:center;
+    box-shadow:0 0 60px #00f2ff20;
+    animation:fadeIn 0.6s ease;
   }
-  .key{
-    margin-top:20px;
-    background:#0f172a;
-    padding:15px;
-    border-radius:12px;
-    font-size:20px;
-    font-weight:bold;
-    letter-spacing:2px;
+
+  @keyframes fadeIn{
+    from{opacity:0; transform:translateY(20px);}
+    to{opacity:1; transform:translateY(0);}
   }
-  button{
-    margin-top:20px;
-    padding:12px 25px;
-    border:none;
-    border-radius:10px;
-    background:#00f2ff;
-    color:black;
-    font-weight:bold;
-    cursor:pointer;
+
+  h2{
+    margin:0;
+    font-weight:600;
   }
-  .timer{
-    margin-top:15px;
+
+  .success{
     font-size:14px;
+    color:#22c55e;
+    margin-top:8px;
+  }
+
+  .key-box{
+    margin-top:25px;
+    background:#0f172a;
+    padding:18px;
+    border-radius:15px;
+    font-size:22px;
+    font-weight:bold;
+    letter-spacing:3px;
+    border:1px solid #334155;
+    user-select:all;
+  }
+
+  .btn{
+    margin-top:20px;
+    padding:14px;
+    width:100%;
+    border:none;
+    border-radius:12px;
+    background:#00f2ff;
+    font-weight:bold;
+    font-size:15px;
+    cursor:pointer;
+    transition:0.3s;
+  }
+
+  .btn:hover{
+    background:#00d4e0;
+  }
+
+  .copied{
+    margin-top:12px;
+    font-size:13px;
+    color:#22c55e;
+    display:none;
+  }
+
+  .expire{
+    margin-top:18px;
+    font-size:13px;
     color:#94a3b8;
+  }
+
+  .footer{
+    margin-top:25px;
+    font-size:12px;
+    color:#64748b;
   }
   </style>
   </head>
+
   <body>
 
   <div class="card">
-    <h2>🔐 AXL DEV KEY</h2>
+    <h2>🔐 KEY ĐÃ SẴN SÀNG</h2>
+    <div class="success">Vượt link thành công</div>
 
-    <div class="key" id="keyText">${key}</div>
+    <div class="key-box" id="keyText">${key}</div>
 
-    <button onclick="copyKey()">SAO CHÉP KEY</button>
+    <button class="btn" onclick="copyKey()">SAO CHÉP KEY</button>
 
-    <div class="timer">
-      Tự chuyển về app sau 5 giây...
+    <div class="copied" id="copiedMsg">✓ Đã sao chép vào clipboard</div>
+
+    <div class="expire">
+      Hết hạn sau: <span id="countdown"></span>
+    </div>
+
+    <div class="footer">
+      © 2026 AXL DEV
     </div>
   </div>
 
   <script>
-  setTimeout(()=>{
-    window.location.href="https://google.com";
-  },5000);
-
   function copyKey(){
     const text = document.getElementById("keyText").innerText;
     navigator.clipboard.writeText(text);
-    alert("Đã sao chép key");
+
+    const msg = document.getElementById("copiedMsg");
+    msg.style.display = "block";
+
+    setTimeout(()=>{
+      msg.style.display = "none";
+    },2000);
   }
+
+  const expireTime = ${expireTime};
+
+  function updateCountdown(){
+    const now = Date.now();
+    const diff = expireTime - now;
+
+    if(diff <= 0){
+      document.getElementById("countdown").innerText = "ĐÃ HẾT HẠN";
+      return;
+    }
+
+    const hours = Math.floor(diff / (1000*60*60));
+    const minutes = Math.floor((diff % (1000*60*60)) / (1000*60));
+    const seconds = Math.floor((diff % (1000*60)) / 1000);
+
+    document.getElementById("countdown").innerText =
+      hours + "h " + minutes + "m " + seconds + "s";
+  }
+
+  setInterval(updateCountdown,1000);
+  updateCountdown();
   </script>
 
   </body>
@@ -249,30 +218,3 @@ app.get("/get/:encoded", (req, res) => {
   `);
 });
 
-// =================================
-// 🔥 VERIFY API
-// =================================
-app.get("/verify", (req, res) => {
-
-  const { key } = req.query;
-
-  if (!keys[key]) {
-    return res.json({ status: "invalid" });
-  }
-
-  if (Date.now() > keys[key].expire) {
-    delete keys[key];
-    return res.json({ status: "expired" });
-  }
-
-  res.json({
-    status: "valid",
-    expire: keys[key].expire
-  });
-});
-
-// =================================
-
-app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
-});
