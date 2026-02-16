@@ -14,7 +14,7 @@ const LINK4M_TOKEN = "687f718ea1faab07844af330";
 const KEY_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
 // ===================
 
-// ===== LOAD DATABASE =====
+// ===== DATABASE =====
 let db = { keys: {} };
 
 if (fs.existsSync(DATA_FILE)) {
@@ -40,11 +40,10 @@ setInterval(() => {
 app.use((req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Referrer-Policy", "no-referrer");
   next();
 });
 
-// ===== UI LAYOUT =====
+// ===== UI =====
 function layout(title, content) {
 return `
 <!DOCTYPE html>
@@ -72,23 +71,15 @@ color:#fff;
 100%{background-position:0% 50%}
 }
 .card{
-width:500px;
+width:520px;
 padding:45px;
 border-radius:25px;
 background:rgba(0,0,0,0.65);
 backdrop-filter:blur(25px);
 box-shadow:0 0 60px rgba(0,255,255,0.2);
-animation:fade 0.6s ease;
 text-align:center;
 }
-@keyframes fade{
-from{opacity:0;transform:translateY(20px)}
-to{opacity:1;transform:translateY(0)}
-}
-h2{
-margin-bottom:20px;
-text-shadow:0 0 10px #00ffff;
-}
+h2{margin-bottom:20px}
 button{
 margin-top:20px;
 width:100%;
@@ -98,11 +89,6 @@ border-radius:12px;
 background:linear-gradient(45deg,#00ffff,#00ff88);
 font-weight:bold;
 cursor:pointer;
-transition:0.3s;
-}
-button:hover{
-transform:scale(1.05);
-box-shadow:0 0 25px #00ffff;
 }
 input{
 width:100%;
@@ -113,36 +99,15 @@ border-radius:12px;
 background:#111;
 color:#00ffff;
 text-align:center;
-font-size:14px;
-box-shadow:0 0 15px rgba(0,255,255,0.3);
 }
-.notice{
-margin-top:15px;
-font-size:13px;
-opacity:0.8;
-}
+.notice{margin-top:15px;font-size:13px;opacity:0.8}
 .error{color:#ff4d4d}
 .success{color:#00ff88}
-.toast{
-position:fixed;
-bottom:30px;
-right:30px;
-background:#00ff88;
-color:#000;
-padding:15px 25px;
-border-radius:12px;
-box-shadow:0 0 20px #00ff88;
-opacity:0;
-transition:0.4s;
-}
-.toast.show{opacity:1;}
 </style>
 <script>
 function copyKey(text){
 navigator.clipboard.writeText(text);
-const toast=document.getElementById("toast");
-toast.classList.add("show");
-setTimeout(()=>toast.classList.remove("show"),2000);
+alert("Copied!");
 }
 </script>
 </head>
@@ -150,7 +115,6 @@ setTimeout(()=>toast.classList.remove("show"),2000);
 <div class="card">
 ${content}
 </div>
-<div id="toast" class="toast">Copied to clipboard</div>
 </body>
 </html>
 `;
@@ -158,16 +122,15 @@ ${content}
 
 // ===== HOME =====
 app.get("/", (req, res) => {
-  res.send(layout("Secure Key Server", `
+  res.send(layout("Secure Server", `
     <h2>SECURE KEY GENERATOR</h2>
     <form method="POST" action="/create">
       <button>TẠO KEY</button>
     </form>
-    <div class="notice">Key tồn tại 2 giờ • Chỉ dùng 1 lần</div>
   `));
 });
 
-// ===== CREATE KEY =====
+// ===== CREATE =====
 app.post("/create", async (req, res) => {
 
   const key = crypto.randomBytes(8).toString("hex");
@@ -175,7 +138,8 @@ app.post("/create", async (req, res) => {
 
   db.keys[key] = {
     expireAt: now + KEY_DURATION,
-    used: false
+    used: false,
+    device: null
   };
 
   saveDB();
@@ -194,18 +158,18 @@ app.post("/create", async (req, res) => {
       <h2 class="success">LINK GENERATED</h2>
       <input value="${shortLink}" readonly>
       <button onclick="copyKey('${shortLink}')">COPY LINK</button>
-      <div class="notice">Vượt link để nhận key</div>
     `));
 
   } catch {
-    res.send(layout("Error", `<h2 class="error">LỖI TẠO LINK4M</h2>`));
+    res.send(layout("Error", `<h2 class="error">LỖI LINK4M</h2>`));
   }
 });
 
-// ===== SHOW CLAIM PAGE (KHÔNG đánh dấu used) =====
+// ===== GET KEY PAGE =====
 app.get("/get/:key", (req, res) => {
 
   const key = req.params.key;
+  const ip = req.ip;
 
   if (!db.keys[key]) {
     return res.send(layout("Error", `<h2 class="error">KEY KHÔNG TỒN TẠI</h2>`));
@@ -216,38 +180,61 @@ app.get("/get/:key", (req, res) => {
   if (Date.now() > data.expireAt) {
     delete db.keys[key];
     saveDB();
-    return res.send(layout("Expired", `<h2 class="error">KEY ĐÃ HẾT HẠN</h2>`));
+    return res.send(layout("Expired", `<h2 class="error">KEY HẾT HẠN</h2>`));
   }
 
+  // Nếu key đã claim
   if (data.used) {
-    return res.send(layout("Used", `<h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG</h2>`));
+
+    // Nếu cùng thiết bị (IP)
+    if (data.device === ip) {
+
+      const timeLeft = Math.floor((data.expireAt - Date.now()) / 60000);
+
+      return res.send(layout("Your Key", `
+        <h2 class="success">KEY CỦA BẠN</h2>
+        <input value="${key}" readonly>
+        <button onclick="copyKey('${key}')">COPY KEY</button>
+        <div class="notice">Còn ${timeLeft} phút sử dụng</div>
+      `));
+    }
+
+    // Thiết bị khác
+    return res.send(layout("Blocked", `
+      <h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG TRÊN THIẾT BỊ KHÁC</h2>
+    `));
   }
 
-  res.send(layout("Claim Key", `
-    <h2>NHẤN ĐỂ NHẬN KEY</h2>
+  // Chưa claim
+  res.send(layout("Claim", `
+    <h2>NHẬN KEY</h2>
     <form method="POST" action="/claim/${key}">
       <button>NHẬN KEY</button>
     </form>
   `));
 });
 
-// ===== CLAIM KEY (LÚC NÀY mới đánh dấu used) =====
+// ===== CLAIM =====
 app.post("/claim/:key", (req, res) => {
 
   const key = req.params.key;
+  const ip = req.ip;
 
   if (!db.keys[key] || db.keys[key].used) {
     return res.send(layout("Used", `<h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG</h2>`));
   }
 
   db.keys[key].used = true;
+  db.keys[key].device = ip;
   saveDB();
+
+  const timeLeft = Math.floor((db.keys[key].expireAt - Date.now()) / 60000);
 
   res.send(layout("Your Key", `
     <h2 class="success">ACCESS GRANTED</h2>
     <input value="${key}" readonly>
     <button onclick="copyKey('${key}')">COPY KEY</button>
-    <div class="notice">Key chỉ dùng 1 lần • Không refresh</div>
+    <div class="notice">Còn ${timeLeft} phút sử dụng</div>
   `));
 });
 
