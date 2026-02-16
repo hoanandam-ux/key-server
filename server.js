@@ -4,48 +4,64 @@ const crypto = require("crypto");
 const axios = require("axios");
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.set("trust proxy", true); // lấy IP thật trên Render
 
+// ===== CONFIG =====
 const PORT = process.env.PORT || 10000;
-const DATA_FILE = "keys.json";
-const LINK4M_TOKEN = "687f718ea1faab07844af330";
+const DATA_FILE = "database.json";
+const LINK4M_TOKEN = "687f718ea1faab07844af330"; // HARD CODE
 const KEY_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
+// ===================
 
-// ================= LOAD DATA =================
+// ===== LOAD DATABASE =====
+let db = { keys: {}, ipMap: {} };
 
-let keys = {};
 if (fs.existsSync(DATA_FILE)) {
-  keys = JSON.parse(fs.readFileSync(DATA_FILE));
+  db = JSON.parse(fs.readFileSync(DATA_FILE));
 }
 
-function saveKeys() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(keys, null, 2));
+function saveDB() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
 
-// Auto clean mỗi 60s
+// ===== AUTO CLEAN =====
 setInterval(() => {
   const now = Date.now();
-  for (let k in keys) {
-    if (keys[k].expireAt < now) {
-      delete keys[k];
+
+  for (let key in db.keys) {
+    if (db.keys[key].expireAt < now) {
+      delete db.keys[key];
     }
   }
-  saveKeys();
+
+  for (let ip in db.ipMap) {
+    if (db.ipMap[ip] < now) {
+      delete db.ipMap[ip];
+    }
+  }
+
+  saveDB();
 }, 60000);
 
-// ================= UI LAYOUT =================
+// ===== SECURITY HEADERS =====
+app.use((req, res, next) => {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
+});
 
+// ===== UI LAYOUT =====
 function layout(title, content) {
 return `
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${title}</title>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap');
 
 *{margin:0;padding:0;box-sizing:border-box}
 
@@ -55,72 +71,51 @@ display:flex;
 justify-content:center;
 align-items:center;
 font-family:'Orbitron',sans-serif;
+background:radial-gradient(circle at top,#0f2027,#203a43,#2c5364);
+overflow:hidden;
 color:#fff;
-background:linear-gradient(-45deg,#0f172a,#020617,#0f172a,#111827);
-background-size:400% 400%;
-animation:bgMove 15s ease infinite;
-}
-
-@keyframes bgMove{
-0%{background-position:0% 50%}
-50%{background-position:100% 50%}
-100%{background-position:0% 50%}
 }
 
 .card{
-width:440px;
+width:450px;
 padding:40px;
 border-radius:20px;
-background:rgba(30,41,59,0.6);
+background:rgba(0,0,0,0.6);
 backdrop-filter:blur(20px);
-box-shadow:0 0 40px rgba(0,255,255,0.15);
-position:relative;
-animation:fadeIn 1s ease forwards;
+box-shadow:0 0 50px rgba(0,255,255,0.2);
+animation:fade 0.8s ease;
 }
 
-@keyframes fadeIn{
-from{opacity:0;transform:translateY(20px)}
-to{opacity:1;transform:translateY(0)}
-}
-
-.card::before{
-content:"";
-position:absolute;
-top:-2px;left:-2px;right:-2px;bottom:-2px;
-border-radius:20px;
-background:linear-gradient(45deg,#00f2ff,#00ff88,#00f2ff);
-z-index:-1;
-filter:blur(10px);
-opacity:0.5;
+@keyframes fade{
+from{opacity:0;transform:scale(0.9)}
+to{opacity:1;transform:scale(1)}
 }
 
 h2{
 text-align:center;
 margin-bottom:20px;
-letter-spacing:1px;
+letter-spacing:2px;
 }
 
 input{
 width:100%;
-padding:14px;
+padding:15px;
 border:none;
-border-radius:12px;
-background:#0f172a;
-color:#00f2ff;
+border-radius:10px;
+background:#111;
+color:#00ffff;
 text-align:center;
-outline:none;
-margin-top:10px;
-box-shadow:inset 0 0 10px rgba(0,255,255,0.2);
+margin-top:15px;
+font-size:14px;
 }
 
 button{
-margin-top:18px;
+margin-top:20px;
 width:100%;
-padding:14px;
+padding:15px;
 border:none;
-border-radius:12px;
-background:linear-gradient(45deg,#00f2ff,#00ff88);
-color:#000;
+border-radius:10px;
+background:linear-gradient(45deg,#00ffff,#00ff88);
 font-weight:bold;
 cursor:pointer;
 transition:0.3s;
@@ -128,80 +123,71 @@ transition:0.3s;
 
 button:hover{
 transform:scale(1.05);
-box-shadow:0 0 20px #00f2ff;
+box-shadow:0 0 20px #00ffff;
 }
 
-.toast{
-position:fixed;
-bottom:30px;
-background:#00ff88;
-color:#000;
-padding:12px 20px;
-border-radius:8px;
-opacity:0;
-transition:0.4s;
+.notice{
+margin-top:15px;
+text-align:center;
+font-size:13px;
+opacity:0.8;
 }
 
-.toast.show{opacity:1}
-
-.typing{
-border-right:2px solid #00f2ff;
-white-space:nowrap;
-overflow:hidden;
-animation:typing 2s steps(20), blink 0.7s infinite;
-}
-
-@keyframes typing{
-from{width:0}
-to{width:100%}
-}
-
-@keyframes blink{
-50%{border-color:transparent}
-}
+.error{color:#ff4d4d;text-align:center}
+.success{color:#00ff88;text-align:center}
 </style>
-</head>
-
-<body>
-
-<div class="card">
-${content}
-</div>
-
-<div class="toast" id="toast">✔ Copied Successfully</div>
 
 <script>
 function copyText(text){
 navigator.clipboard.writeText(text);
-let t=document.getElementById("toast");
-t.classList.add("show");
-setTimeout(()=>{t.classList.remove("show")},2000);
+alert("Copied!");
 }
 </script>
 
+</head>
+<body>
+<div class="card">
+${content}
+</div>
 </body>
 </html>
 `;
 }
 
-// ================= ROUTES =================
-
-// Trang chính
+// ===== HOME =====
 app.get("/", (req, res) => {
-  res.send(layout("Dev Key Server", `
-  <h2 class="typing">DEV KEY GENERATOR</h2>
-  <form method="POST" action="/create">
-    <button>TẠO KEY</button>
-  </form>
+  res.send(layout("Secure Key Server", `
+    <h2>SECURE KEY GENERATOR</h2>
+    <form method="POST" action="/create">
+      <button>TẠO KEY</button>
+    </form>
+    <div class="notice">1 IP chỉ tạo 1 key / 2 giờ</div>
   `));
 });
 
-// Tạo key
+// ===== CREATE KEY =====
 app.post("/create", async (req, res) => {
 
-  const key = crypto.randomBytes(6).toString("hex");
-  keys[key] = { expireAt: Date.now() + KEY_DURATION };
-  saveKeys();
+  const ip = req.ip;
+  const now = Date.now();
+
+  // IP check
+  if (db.ipMap[ip] && db.ipMap[ip] > now) {
+    return res.send(layout("Blocked", `
+      <h2 class="error">IP đã tạo key rồi</h2>
+      <div class="notice">Vui lòng chờ 2 giờ</div>
+    `));
+  }
+
+  const key = crypto.randomBytes(8).toString("hex");
+
+  db.keys[key] = {
+    expireAt: now + KEY_DURATION,
+    used: false
+  };
+
+  db.ipMap[ip] = now + KEY_DURATION;
+  saveDB();
 
   const baseUrl = req.protocol + "://" + req.get("host");
   const targetUrl = baseUrl + "/get/" + key;
@@ -214,38 +200,58 @@ app.post("/create", async (req, res) => {
     const shortLink = response.data.shortenedUrl;
 
     res.send(layout("Link Created", `
-    <h2 class="typing">LINK GENERATED</h2>
-    <input value="${shortLink}" readonly>
-    <button onclick="copyText('${shortLink}')">COPY LINK</button>
+      <h2 class="success">LINK GENERATED</h2>
+      <input value="${shortLink}" readonly>
+      <button onclick="copyText('${shortLink}')">COPY LINK</button>
+      <div class="notice">Key hết hạn sau 2 giờ</div>
     `));
 
-  } catch (err) {
-    res.send(layout("Error", `<h2>❌ Lỗi tạo link4m</h2>`));
+  } catch {
+    res.send(layout("Error", `
+      <h2 class="error">Lỗi tạo link4m</h2>
+    `));
   }
 });
 
-// Sau khi vượt link
+// ===== GET KEY =====
 app.get("/get/:key", (req, res) => {
 
   const key = req.params.key;
 
-  if (!keys[key]) {
-    return res.send(layout("Error", `<h2>❌ Key không tồn tại</h2>`));
+  if (!db.keys[key]) {
+    return res.send(layout("Error", `
+      <h2 class="error">KEY KHÔNG TỒN TẠI</h2>
+    `));
   }
 
-  if (Date.now() > keys[key].expireAt) {
-    delete keys[key];
-    saveKeys();
-    return res.send(layout("Expired", `<h2>⏳ Key đã hết hạn</h2>`));
+  const data = db.keys[key];
+
+  if (Date.now() > data.expireAt) {
+    delete db.keys[key];
+    saveDB();
+    return res.send(layout("Expired", `
+      <h2 class="error">KEY ĐÃ HẾT HẠN</h2>
+    `));
   }
+
+  if (data.used) {
+    return res.send(layout("Used", `
+      <h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG</h2>
+    `));
+  }
+
+  // đánh dấu đã dùng
+  db.keys[key].used = true;
+  saveDB();
 
   res.send(layout("Your Key", `
-  <h2 class="typing">ACCESS GRANTED</h2>
-  <input value="${key}" readonly>
-  <button onclick="copyText('${key}')">COPY KEY</button>
+    <h2 class="success">ACCESS GRANTED</h2>
+    <input value="${key}" readonly>
+    <button onclick="copyText('${key}')">COPY KEY</button>
+    <div class="notice">Key chỉ dùng 1 lần</div>
   `));
 });
 
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Secure server running on port " + PORT);
 });
