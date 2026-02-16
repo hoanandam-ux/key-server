@@ -110,6 +110,7 @@ app.get("/", async (req, res) => {
 });
 
 // =================================
+// =================================
 // 🔥 GET KEY SAU KHI VƯỢT LINK4M
 // =================================
 app.get("/get/:encoded", (req, res) => {
@@ -126,38 +127,120 @@ app.get("/get/:encoded", (req, res) => {
     return res.send("Key đã hết hạn");
   }
 
+  const expire = keys[key].expire;
+
   res.send(`
-    <html>
-      <body style="background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:100px;">
-        <h2>🔑 KEY CỦA BẠN</h2>
-        <h1>${key}</h1>
-        <p>Hạn: 2 giờ</p>
-      </body>
-    </html>
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <title>AXL KEY SYSTEM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      body{
+        margin:0;
+        background:linear-gradient(135deg,#0f172a,#1e293b);
+        font-family:Arial, sans-serif;
+        color:white;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        height:100vh;
+      }
+      .card{
+        background:#111827;
+        padding:40px;
+        border-radius:20px;
+        width:420px;
+        text-align:center;
+        box-shadow:0 0 40px #00f2ff40;
+        animation:fadeIn 0.6s ease;
+      }
+      @keyframes fadeIn{
+        from{opacity:0;transform:translateY(20px)}
+        to{opacity:1;transform:translateY(0)}
+      }
+      .key-box{
+        background:#0f172a;
+        padding:15px;
+        margin:20px 0;
+        border-radius:12px;
+        font-size:22px;
+        font-weight:bold;
+        letter-spacing:2px;
+        border:1px solid #00f2ff50;
+      }
+      button{
+        background:#00f2ff;
+        color:black;
+        border:none;
+        padding:12px 25px;
+        border-radius:10px;
+        font-weight:bold;
+        cursor:pointer;
+        transition:0.2s;
+      }
+      button:hover{
+        background:#00c2cc;
+        transform:scale(1.05);
+      }
+      .timer{
+        margin-top:15px;
+        font-size:14px;
+        color:#94a3b8;
+      }
+      .success{
+        color:#22c55e;
+        font-size:14px;
+        margin-top:10px;
+        display:none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>🔑 KEY CỦA BẠN</h2>
+
+      <div class="key-box" id="keyText">${key}</div>
+
+      <button onclick="copyKey()">SAO CHÉP KEY</button>
+
+      <div class="success" id="copied">✔ Đã sao chép thành công</div>
+
+      <div class="timer">
+        Hết hạn sau: <span id="countdown"></span>
+      </div>
+    </div>
+
+    <script>
+      const expireTime = ${expire};
+
+      function copyKey(){
+        const key = document.getElementById("keyText").innerText;
+        navigator.clipboard.writeText(key);
+        document.getElementById("copied").style.display = "block";
+      }
+
+      function updateCountdown(){
+        const now = Date.now();
+        const distance = expireTime - now;
+
+        if(distance <= 0){
+          document.getElementById("countdown").innerText = "ĐÃ HẾT HẠN";
+          return;
+        }
+
+        const hours = Math.floor(distance / (1000*60*60));
+        const minutes = Math.floor((distance % (1000*60*60)) / (1000*60));
+        const seconds = Math.floor((distance % (1000*60)) / 1000);
+
+        document.getElementById("countdown").innerText =
+          hours + "h " + minutes + "m " + seconds + "s";
+      }
+
+      setInterval(updateCountdown, 1000);
+      updateCountdown();
+    </script>
+  </body>
+  </html>
   `);
-});
-
-// =================================
-// 🔥 VERIFY
-// =================================
-app.get("/verify", (req, res) => {
-  const { key } = req.query;
-
-  if (!keys[key]) {
-    return res.json({ status: "invalid" });
-  }
-
-  if (Date.now() > keys[key].expire) {
-    delete keys[key];
-    return res.json({ status: "expired" });
-  }
-
-  res.json({
-    status: "valid",
-    expire: keys[key].expire
-  });
-});
-
-app.listen(PORT, () => {
-  console.log("Server running");
 });
