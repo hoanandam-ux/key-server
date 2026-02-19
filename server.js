@@ -8,6 +8,11 @@ app.set("trust proxy", true);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json()); // <-- thêm để nhận JSON nếu cần
 
+// HEALTH CHECK (không ảnh hưởng hệ thống cũ)
+app.get("/ping", (req, res) => {
+  res.send("OK");
+});
+
 // ===== CONFIG =====
 const PORT = process.env.PORT || 10000;
 const DATA_FILE = "database.json";
