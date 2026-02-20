@@ -16,16 +16,25 @@ const PORT = process.env.PORT || 10000;
 const DATA_FILE = "database.json";
 const LINK4M_TOKEN = "687f718ea1faab07844af330";
 const KEY_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
-const ADS_DELAY = 30000; // 30 GIÂY xem quảng cáo
+const ADS_DELAY = 30000; // 30s quảng cáo
 const VPN_CHECK_API = "http://ip-api.com/json/";
+const RATE_LIMIT = 5; // max tạo 5 key / phút / IP
 
-// ===== DATABASE =====
+// ===== DATABASE SAFE LOAD =====
 let db = { keys: {} };
-if (fs.existsSync(DATA_FILE)) {
-  db = JSON.parse(fs.readFileSync(DATA_FILE));
+try {
+  if (fs.existsSync(DATA_FILE)) {
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    db = raw ? JSON.parse(raw) : { keys: {} };
+  }
+} catch {
+  db = { keys: {} };
 }
+
 function saveDB() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+  } catch {}
 }
 
 // ===== AUTO CLEAN EXPIRED KEYS =====
@@ -39,6 +48,17 @@ setInterval(() => {
   saveDB();
 }, 60000);
 
+// ===== RATE LIMIT CREATE KEY =====
+const createLogs = {};
+function canCreate(ip) {
+  const now = Date.now();
+  if (!createLogs[ip]) createLogs[ip] = [];
+  createLogs[ip] = createLogs[ip].filter(t => now - t < 60000);
+  if (createLogs[ip].length >= RATE_LIMIT) return false;
+  createLogs[ip].push(now);
+  return true;
+}
+
 // ===== SECURITY HEADERS =====
 app.use((req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
@@ -46,17 +66,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// ===== ANTI VPN =====
+// ===== ANTI VPN (timeout tránh treo server) =====
 async function isVPN(ip) {
   try {
-    const res = await axios.get(VPN_CHECK_API + ip + "?fields=proxy,hosting");
+    const res = await axios.get(VPN_CHECK_API + ip + "?fields=proxy,hosting", {
+      timeout: 4000
+    });
     return res.data.proxy === true || res.data.hosting === true;
   } catch {
     return false;
   }
 }
 
-// ===== UI =====
+// ===== UI LAYOUT =====
 function layout(title, content) {
 return `
 <!DOCTYPE html>
@@ -143,8 +165,16 @@ app.get("/", (req, res) => {
   `));
 });
 
-// ===== CREATE KEY (GIỮ LINK4M) =====
+// ===== CREATE KEY (giữ link4m) =====
 app.post("/create", async (req, res) => {
+  const ip = req.ip;
+  if (!canCreate(ip)) {
+    return res.send(layout("Spam Block", `
+      <h2 class="error">TẠO KEY QUÁ NHANH</h2>
+      <div class="notice">Vui lòng chờ 1 phút rồi thử lại</div>
+    `));
+  }
+
   const key = crypto.randomBytes(8).toString("hex");
   const now = Date.now();
 
@@ -158,11 +188,10 @@ app.post("/create", async (req, res) => {
   const baseUrl = req.protocol + "://" + req.get("host");
   const targetUrl = baseUrl + "/get/" + key;
 
-  const apiUrl =
-    `https://link4m.co/api-shorten/v2?api=${LINK4M_TOKEN}&url=${encodeURIComponent(targetUrl)}`;
-
   try {
-    const response = await axios.get(apiUrl);
+    const apiUrl =
+      `https://link4m.co/api-shorten/v2?api=${LINK4M_TOKEN}&url=${encodeURIComponent(targetUrl)}`;
+    const response = await axios.get(apiUrl, { timeout: 5000 });
     const shortLink = response.data.shortenedUrl;
 
     res.send(layout("Link Created", `
@@ -176,7 +205,7 @@ app.post("/create", async (req, res) => {
   }
 });
 
-// ===== VERIFY API (GIỮ NGUYÊN) =====
+// ===== VERIFY API (giữ nguyên) =====
 app.post("/verify", async (req, res) => {
   const key = req.body.key;
   const ip = req.ip;
