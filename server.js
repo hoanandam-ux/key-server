@@ -289,14 +289,13 @@ app.get("/ads/:key", (req, res) => {
     return res.send(layout("Error", `<h2 class="error">KEY KHÔNG TỒN TẠI</h2>`));
   }
 
-  // lưu thời gian bắt đầu xem quảng cáo
   adSessions[ip + "_" + key] = Date.now();
 
   res.send(layout("Watching Ads", `
     <h2>VUI LÒNG XEM QUẢNG CÁO 30 GIÂY</h2>
     <div class="notice">Không tắt tab để tiếp tục...</div>
 
-    <!-- DÁN SCRIPT QUẢNG CÁO PROP / MONETAG TẠI ĐÂY -->
+    <script src="https://quge5.com/88/tag.min.js" data-zone="212866" async data-cfasync="false"></script>
 
     <script>
       setTimeout(() => {
