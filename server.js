@@ -289,14 +289,25 @@ app.get("/ads/:key", (req, res) => {
     return res.send(layout("Error", `<h2 class="error">KEY KHÔNG TỒN TẠI</h2>`));
   }
 
+  // lưu thời gian bắt đầu xem quảng cáo
   adSessions[ip + "_" + key] = Date.now();
 
   res.send(layout("Watching Ads", `
     <h2>VUI LÒNG XEM QUẢNG CÁO 30 GIÂY</h2>
     <div class="notice">Không tắt tab để tiếp tục...</div>
 
-    <script src="https://quge5.com/88/tag.min.js" data-zone="212866" async data-cfasync="false"></script>
+    <!-- MULTITAG SCRIPT -->
+    <script>
+    (function(s){
+      s.dataset.zone='10633768',
+      s.src='https://al5sm.com/tag.min.js'
+    })
+    ([document.documentElement, document.body]
+    .filter(Boolean).pop()
+    .appendChild(document.createElement('script')))
+    </script>
 
+    <!-- 30s redirect -->
     <script>
       setTimeout(() => {
         window.location.href = "/claim/${key}";
