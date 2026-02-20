@@ -7,6 +7,7 @@ const app = express();
 app.set("trust proxy", true);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(express.static(__dirname));
 
 // ===== HEALTH CHECK =====
 app.get("/ping", (req, res) => res.send("OK"));
