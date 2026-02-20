@@ -6,36 +6,29 @@ const axios = require("axios");
 const app = express();
 app.set("trust proxy", true);
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json()); // <-- thêm để nhận JSON nếu cần
+app.use(express.json());
 
-// HEALTH CHECK (không ảnh hưởng hệ thống cũ)
-app.get("/ping", (req, res) => {
-  res.send("OK");
-});
+// ===== HEALTH CHECK =====
+app.get("/ping", (req, res) => res.send("OK"));
 
 // ===== CONFIG =====
 const PORT = process.env.PORT || 10000;
 const DATA_FILE = "database.json";
 const LINK4M_TOKEN = "687f718ea1faab07844af330";
 const KEY_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
-
-// Anti VPN API (FREE)
-const VPN_CHECK_API = "http://ip-api.com/json/"; 
-// ===================
-
+const ADS_DELAY = 30000; // 30 GIÂY xem quảng cáo
+const VPN_CHECK_API = "http://ip-api.com/json/";
 
 // ===== DATABASE =====
 let db = { keys: {} };
-
 if (fs.existsSync(DATA_FILE)) {
   db = JSON.parse(fs.readFileSync(DATA_FILE));
 }
-
 function saveDB() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
 
-// ===== AUTO CLEAN =====
+// ===== AUTO CLEAN EXPIRED KEYS =====
 setInterval(() => {
   const now = Date.now();
   for (let key in db.keys) {
@@ -53,8 +46,7 @@ app.use((req, res, next) => {
   next();
 });
 
-
-// ================= ANTI VPN FUNCTION =================
+// ===== ANTI VPN =====
 async function isVPN(ip) {
   try {
     const res = await axios.get(VPN_CHECK_API + ip + "?fields=proxy,hosting");
@@ -63,10 +55,8 @@ async function isVPN(ip) {
     return false;
   }
 }
-// =====================================================
 
-
-// ===== UI (GIỮ NGUYÊN) =====
+// ===== UI =====
 function layout(title, content) {
 return `
 <!DOCTYPE html>
@@ -153,9 +143,8 @@ app.get("/", (req, res) => {
   `));
 });
 
-// ===== CREATE =====
+// ===== CREATE KEY (GIỮ LINK4M) =====
 app.post("/create", async (req, res) => {
-
   const key = crypto.randomBytes(8).toString("hex");
   const now = Date.now();
 
@@ -164,7 +153,6 @@ app.post("/create", async (req, res) => {
     used: false,
     device: null
   };
-
   saveDB();
 
   const baseUrl = req.protocol + "://" + req.get("host");
@@ -181,24 +169,19 @@ app.post("/create", async (req, res) => {
       <h2 class="success">VƯỢT LINK ĐỂ LẤY KEY</h2>
       <input value="${shortLink}" readonly>
       <button onclick="copyKey('${shortLink}')">COPY LINK</button>
+      <div class="notice">Bạn vẫn phải vượt Link4M trước khi xem quảng cáo</div>
     `));
-
   } catch {
     res.send(layout("Error", `<h2 class="error">LỖI LINK4M</h2>`));
   }
 });
 
-
-// =====================
-// ===== VERIFY API =====  <-- CHỈ THÊM ĐOẠN NÀY
-// =====================
+// ===== VERIFY API (GIỮ NGUYÊN) =====
 app.post("/verify", async (req, res) => {
   const key = req.body.key;
   const ip = req.ip;
 
-  if (!db.keys[key]) {
-    return res.json({ status: "invalid" });
-  }
+  if (!db.keys[key]) return res.json({ status: "invalid" });
 
   const data = db.keys[key];
 
@@ -208,25 +191,17 @@ app.post("/verify", async (req, res) => {
     return res.json({ status: "expired" });
   }
 
-  if (!data.used) {
-    return res.json({ status: "not_claimed" });
-  }
-
-  if (data.device !== ip) {
-    return res.json({ status: "device_mismatch" });
-  }
+  if (!data.used) return res.json({ status: "not_claimed" });
+  if (data.device !== ip) return res.json({ status: "device_mismatch" });
 
   return res.json({
     status: "valid",
     expireAt: data.expireAt
   });
 });
-// =====================
-
 
 // ===== GET KEY =====
 app.get("/get/:key", async (req, res) => {
-
   const key = req.params.key;
   const ip = req.ip;
 
@@ -250,11 +225,8 @@ app.get("/get/:key", async (req, res) => {
   }
 
   if (data.used) {
-
     if (data.device === ip) {
-
       const timeLeft = Math.floor((data.expireAt - Date.now()) / 60000);
-
       return res.send(layout("Your Key", `
         <h2 class="success">KEY CỦA BẠN</h2>
         <input value="${key}" readonly>
@@ -262,7 +234,6 @@ app.get("/get/:key", async (req, res) => {
         <div class="notice">Còn ${timeLeft} phút sử dụng</div>
       `));
     }
-
     return res.send(layout("Blocked", `
       <h2 class="error">KEY ĐÃ ĐƯỢC SỬ DỤNG TRÊN THIẾT BỊ KHÁC</h2>
     `));
@@ -270,15 +241,36 @@ app.get("/get/:key", async (req, res) => {
 
   res.send(layout("Claim", `
     <h2>NHẬN KEY</h2>
-    <form method="POST" action="/claim/${key}">
+    <form method="GET" action="/ads/${key}">
       <button>NHẬN KEY</button>
     </form>
   `));
 });
 
-// ===== CLAIM =====
-app.post("/claim/:key", async (req, res) => {
+// ===== ADS GATE 30s =====
+app.get("/ads/:key", (req, res) => {
+  const key = req.params.key;
 
+  if (!db.keys[key]) {
+    return res.send(layout("Error", `<h2 class="error">KEY KHÔNG TỒN TẠI</h2>`));
+  }
+
+  res.send(layout("Watching Ads", `
+    <h2>VUI LÒNG XEM QUẢNG CÁO 30 GIÂY</h2>
+    <div class="notice">Không tắt tab để tiếp tục...</div>
+
+    <!-- DÁN SCRIPT QUẢNG CÁO MONETAG / PROP HERE -->
+
+    <script>
+      setTimeout(() => {
+        window.location.href = "/claim/${key}";
+      }, ${ADS_DELAY});
+    </script>
+  `));
+});
+
+// ===== CLAIM KEY =====
+app.get("/claim/:key", async (req, res) => {
   const key = req.params.key;
   const ip = req.ip;
 
