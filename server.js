@@ -20,6 +20,9 @@ const ADS_DELAY = 30000; // 30s quảng cáo
 const VPN_CHECK_API = "http://ip-api.com/json/";
 const RATE_LIMIT = 5; // max tạo 5 key / phút / IP
 
+// ===== ADS SESSION (ANTI BYPASS) =====
+const adSessions = {}; // lưu thời gian bắt đầu xem quảng cáo theo IP + key
+
 // ===== DATABASE SAFE LOAD =====
 let db = { keys: {} };
 try {
@@ -66,7 +69,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ===== ANTI VPN (timeout tránh treo server) =====
+// ===== ANTI VPN =====
 async function isVPN(ip) {
   try {
     const res = await axios.get(VPN_CHECK_API + ip + "?fields=proxy,hosting", {
@@ -165,7 +168,7 @@ app.get("/", (req, res) => {
   `));
 });
 
-// ===== CREATE KEY (giữ link4m) =====
+// ===== CREATE KEY (GIỮ NGUYÊN LINK4M) =====
 app.post("/create", async (req, res) => {
   const ip = req.ip;
   if (!canCreate(ip)) {
@@ -205,7 +208,7 @@ app.post("/create", async (req, res) => {
   }
 });
 
-// ===== VERIFY API (giữ nguyên) =====
+// ===== VERIFY API (GIỮ NGUYÊN) =====
 app.post("/verify", async (req, res) => {
   const key = req.body.key;
   const ip = req.ip;
@@ -276,19 +279,23 @@ app.get("/get/:key", async (req, res) => {
   `));
 });
 
-// ===== ADS GATE 30s =====
+// ===== ADS GATE (ANTI BYPASS 30s) =====
 app.get("/ads/:key", (req, res) => {
   const key = req.params.key;
+  const ip = req.ip;
 
   if (!db.keys[key]) {
     return res.send(layout("Error", `<h2 class="error">KEY KHÔNG TỒN TẠI</h2>`));
   }
 
+  // lưu thời gian bắt đầu xem quảng cáo
+  adSessions[ip + "_" + key] = Date.now();
+
   res.send(layout("Watching Ads", `
     <h2>VUI LÒNG XEM QUẢNG CÁO 30 GIÂY</h2>
     <div class="notice">Không tắt tab để tiếp tục...</div>
 
-    <!-- DÁN SCRIPT QUẢNG CÁO MONETAG / PROP HERE -->
+    <!-- DÁN SCRIPT QUẢNG CÁO PROP / MONETAG TẠI ĐÂY -->
 
     <script>
       setTimeout(() => {
@@ -298,10 +305,29 @@ app.get("/ads/:key", (req, res) => {
   `));
 });
 
-// ===== CLAIM KEY =====
+// ===== CLAIM KEY (CHECK 30s SERVER SIDE) =====
 app.get("/claim/:key", async (req, res) => {
   const key = req.params.key;
   const ip = req.ip;
+
+  const sessionKey = ip + "_" + key;
+  if (!adSessions[sessionKey]) {
+    return res.send(layout("Error", `
+      <h2 class="error">BẠN CHƯA XEM QUẢNG CÁO</h2>
+      <div class="notice">Vui lòng quay lại và xem đủ 30 giây</div>
+    `));
+  }
+
+  const waited = Date.now() - adSessions[sessionKey];
+  if (waited < ADS_DELAY) {
+    const remain = Math.ceil((ADS_DELAY - waited) / 1000);
+    return res.send(layout("Wait", `
+      <h2 class="error">CHƯA ĐỦ THỜI GIAN</h2>
+      <div class="notice">Vui lòng xem quảng cáo thêm ${remain}s</div>
+    `));
+  }
+
+  delete adSessions[sessionKey];
 
   if (await isVPN(ip)) {
     return res.send(layout("Blocked", `
